@@ -1,13 +1,17 @@
+import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import sys
+from typing import Dict
 
-from utils.constants import HOST, PORT
+from utils.constants import HOST
 from utils.loggers import app_logger
 
 
-class LoadBalancer(BaseHTTPRequestHandler):
+class Server(BaseHTTPRequestHandler):
     def __init__(self, *args) -> None:
+        with open("data.json", "r") as file:
+            self.data: Dict = json.load(file)
         super().__init__(*args)
-        self.content_type: str = self.headers.get("Content-type", "text/html")
 
     def log_message(self, *args) -> None:
         """Overriding the default method to silence unnecessary logs."""
@@ -22,6 +26,7 @@ class LoadBalancer(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    httpd = HTTPServer((HOST, PORT), LoadBalancer)
-    app_logger.info("Load balancer started.")
+    PORT = int(sys.argv[1])
+    httpd = HTTPServer((HOST, PORT), Server)
+    app_logger.info(f"Server started at {PORT}.")
     httpd.serve_forever()
