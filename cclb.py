@@ -5,10 +5,6 @@ from utils.loggers import app_logger
 
 
 class LoadBalancer(BaseHTTPRequestHandler):
-    def __init__(self, *args) -> None:
-        super().__init__(*args)
-        self.content_type: str = self.headers.get("Content-type", "text/html")
-
     def log_message(self, *args) -> None:
         """Overriding the default method to silence unnecessary logs."""
         app_logger.info(f'Recieved request from {self.client_address[0]}: "{self.command} {self.path} {self.request_version}". Agent: {self.headers.get("User-Agent", "Unknown")}.')
@@ -23,5 +19,5 @@ class LoadBalancer(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     httpd = HTTPServer((HOST, PORT), LoadBalancer)
-    app_logger.info("Load balancer started.")
+    app_logger.info(f"Load balancer started at {PORT}.")
     httpd.serve_forever()
