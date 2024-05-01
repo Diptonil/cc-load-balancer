@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 
 ERROR_LOG_FILE = "errors.log"

@@ -3,10 +3,10 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import sys
 from typing import Dict, List, Union
 
-from utils.constants import HOST
 from utils.loggers import app_logger
 
 
+HOST = "localhost"
 Data = Dict[str, List[Dict[str, Union[str, int, float]]]]
 
 
@@ -68,19 +68,19 @@ class Server(BaseHTTPRequestHandler):
     def error_response(self) -> None:
         """For all general server errors and faults."""
         self.send_response(500)
-        self.send_header('Content-type', "text/html")
+        self.send_header('Content-type', 'application/json')
         self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
-        self.wfile.write(b"Bad request")
+        self.wfile.write(json.dumps({"error": "Unsupported request recieved. Server has no implementation for the same."}).encode('utf-8'))
         app_logger.info("Unsupported request recieved. Server has no implementation for the same.")
 
     def not_found_response(self) -> None:
         """For all general errors in which data is not found."""
         self.send_response(404)
-        self.send_header('Content-type', "text/html")
+        self.send_header('Content-type', 'application/json')
         self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
-        self.wfile.write(b"Requested data not found.")
+        self.wfile.write(json.dumps({"error": "Requested data not found."}).encode('utf-8'))
         app_logger.info("Requested data not found.")
 
     def respond(self, item: Dict, log: str) -> None:
