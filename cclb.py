@@ -1,4 +1,8 @@
+import datetime
 import sys
+import gzip
+from typing import Dict
+from io import BytesIO
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import urllib.request
 import urllib.parse
@@ -20,6 +24,24 @@ class LoadBalancer(BaseHTTPRequestHandler):
         """Overriding the default method to silence unnecessary logs."""
         app_logger.info(f'Received request from {self.client_address[0]}: "{self.command} {self.path} {self.request_version}". Agent: {self.headers.get("User-Agent", "Unknown")}.')
 
+    def date_time_string(self) -> str:
+        """Overriding the default method to set Date headers."""
+        current_date_time = datetime.datetime.now()
+        formatted_date = current_date_time.strftime('%a, %d %b %Y %H:%M:%S GMT')
+        return formatted_date
+    
+    def version_string(self) -> str:
+        """Overriding the default method to set Server headers."""
+        return 'CCLoadBalancer/1.0'
+    
+    def get_compressed_data(self, data) -> bytes:
+        """To compress data into GZIP format."""
+        compressed_stream = BytesIO()
+        with gzip.GzipFile(fileobj=compressed_stream, mode='wb') as gzip_file:
+            gzip_file.write(data)
+        compressed_data = compressed_stream.getvalue()
+        return compressed_data
+    
     def do_GET(self):
         """To accept request and systematically call external servers."""
         path_splits = self.path.split('/')[1:]
@@ -35,19 +57,32 @@ class LoadBalancer(BaseHTTPRequestHandler):
                 break
         response = urllib.request.urlopen(f"http://{server_name}{path}")
         status_code = response.status
+        headers = {
+            "Content-Disposition": response.getheader('Content-Disposition'),
+            "Content-Type": response.getheader('Content-Type'),
+            "ETag": response.getheader("ETag")
+        }
         data = response.read()
         if status_code == 500:
-            self.respond(500, data, is_error=True)
+            self.respond(500, data, headers=headers, is_error=True)
         elif status_code == 404:
-            self.respond(500, data, is_error=True)
+            self.respond(500, data, headers=headers, is_error=True)
         elif status_code == 200:
-            self.respond(200, data)
+            self.respond(200, data, headers=headers)
         thread_counter += 1
 
-    def respond(self, status_code: int, data, is_error: bool=False) -> None:
+    def respond(self, status_code: int, data, headers: Dict[str, str], is_error: bool=False) -> None:
+        data = self.get_compressed_data(data)
         self.send_response(status_code)
-        self.send_header('Content-type', 'application/json')
+        self.send_header('Content-type', headers["Content-Type"])
         self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Connection', 'close')
+        self.send_header('Content-Encoding', 'gzip') 
+        self.send_header('Content-Length', len(data))
+        if headers["Content-Disposition"]:
+            self.send_header('Content-Disposition', headers["Content-Disposition"])
+        if headers["Etag"]:
+            self.send_header('ETag', headers["ETag"])
         self.end_headers()
         self.wfile.write(data)
         app_logger.info(f"Server responded with {status_code} status code.")
