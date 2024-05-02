@@ -1,5 +1,4 @@
 import datetime
-import sys
 import gzip
 from typing import Dict
 from io import BytesIO
@@ -43,23 +42,27 @@ class LoadBalancer(BaseHTTPRequestHandler):
         return compressed_data
     
     def do_GET(self):
-        """To accept request and systematically call external servers."""
+        """To accept request and systematically call external servers. Health-checks functional."""
+        # Choosing server based on health-checks.
         path_splits = self.path.split('/')[1:]
         path = ""
         for unit in path_splits:
             path += f"/{unit}"
         global thread_counter
-        for server in server_cluster.servers:
+        server_name = SERVERS[thread_counter % SERVER_COUNT]
+        current_server_is_online = server_cluster.servers[server_name]
+        while not current_server_is_online:
+            thread_counter += 1
             server_name = SERVERS[thread_counter % SERVER_COUNT]
-            if server[1] == False:
-                thread_counter += 1
-            else:
-                break
+            current_server_is_online = server_cluster.servers[server_name]
+
+        # Polling server cluster.
         response = urllib.request.urlopen(f"http://{server_name}{path}")
         status_code = response.status
         headers = {
             "Content-Disposition": response.getheader('Content-Disposition'),
             "Content-Type": response.getheader('Content-Type'),
+            "Cache-Control": response.getheader('Cache-Control'),
             "ETag": response.getheader("ETag")
         }
         data = response.read()
@@ -72,16 +75,17 @@ class LoadBalancer(BaseHTTPRequestHandler):
         thread_counter += 1
 
     def respond(self, status_code: int, data, headers: Dict[str, str], is_error: bool=False) -> None:
+        """Write response to the client along with sending all headers."""
         data = self.get_compressed_data(data)
         self.send_response(status_code)
         self.send_header('Content-type', headers["Content-Type"])
-        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Cache-Control', 'no-cache' if not headers["Cache-Control"] else headers["Cache-Control"])
         self.send_header('Connection', 'close')
         self.send_header('Content-Encoding', 'gzip') 
         self.send_header('Content-Length', len(data))
         if headers["Content-Disposition"]:
             self.send_header('Content-Disposition', headers["Content-Disposition"])
-        if headers["Etag"]:
+        if headers["ETag"]:
             self.send_header('ETag', headers["ETag"])
         self.end_headers()
         self.wfile.write(data)
@@ -100,4 +104,3 @@ if __name__ == "__main__":
         httpd.serve_forever()
     except KeyboardInterrupt:
         app_logger.info(f"Load balancer stopped.")
-        sys.exit(0)
